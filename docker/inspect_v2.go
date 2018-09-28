@@ -7,20 +7,20 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
+	dreference "github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	engineTypes "github.com/docker/docker/api/types"
 	dockerdistribution "github.com/docker/docker/distribution"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/image/v1"
-	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"github.com/estesp/manifest-tool/types"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -42,7 +42,7 @@ type manifestInfo struct {
 	jsonBytes   []byte
 }
 
-func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]types.ImageInspect, error) {
+func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref dreference.Named) ([]types.ImageInspect, error) {
 	var err error
 
 	mf.repo, mf.confirmedV2, err = dockerdistribution.NewV2Repository(ctx, mf.repoInfo, mf.endpoint, nil, &mf.authConfig, "pull")
@@ -67,7 +67,7 @@ func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 	return images, err
 }
 
-func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref reference.Named) ([]types.ImageInspect, error) {
+func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref dreference.Named) ([]types.ImageInspect, error) {
 	var (
 		manifest    distribution.Manifest
 		tagOrDigest string // Used for logging/progress only
@@ -80,14 +80,14 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 		return nil, err
 	}
 
-	if _, isTagged := ref.(reference.NamedTagged); !isTagged {
-		ref, err = reference.WithTag(ref, reference.DefaultTag)
+	if _, isTagged := ref.(dreference.NamedTagged); !isTagged {
+		ref, err = dreference.WithTag(ref, "latest")
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if tagged, isTagged := ref.(reference.NamedTagged); isTagged {
+	if tagged, isTagged := ref.(dreference.NamedTagged); isTagged {
 		// NOTE: not using TagService.Get, since it uses HEAD requests
 		// against the manifests endpoint, which are not supported by
 		// all registry versions.
@@ -96,7 +96,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 			return nil, allowV1Fallback(err)
 		}
 		tagOrDigest = tagged.Tag()
-	} else if digested, isDigested := ref.(reference.Canonical); isDigested {
+	} else if digested, isDigested := ref.(dreference.Canonical); isDigested {
 		manifest, err = manSvc.Get(ctx, digested.Digest())
 		if err != nil {
 			return nil, err
@@ -164,7 +164,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	return imageList, nil
 }
 
-func (mf *v2ManifestFetcher) pullSchema1(ctx context.Context, ref reference.Named, unverifiedManifest *schema1.SignedManifest) (img *image.Image, mfInfo manifestInfo, err error) {
+func (mf *v2ManifestFetcher) pullSchema1(ctx context.Context, ref dreference.Named, unverifiedManifest *schema1.SignedManifest) (img *image.Image, mfInfo manifestInfo, err error) {
 	mfInfo = manifestInfo{}
 	var verifiedManifest *schema1.Manifest
 	verifiedManifest, err = verifySchema1Manifest(unverifiedManifest, ref)
@@ -223,11 +223,11 @@ func (mf *v2ManifestFetcher) pullSchema1(ctx context.Context, ref reference.Name
 	return img, mfInfo, nil
 }
 
-func verifySchema1Manifest(signedManifest *schema1.SignedManifest, ref reference.Named) (m *schema1.Manifest, err error) {
+func verifySchema1Manifest(signedManifest *schema1.SignedManifest, ref dreference.Named) (m *schema1.Manifest, err error) {
 	// If pull by digest, then verify the manifest digest. NOTE: It is
 	// important to do this first, before any other content validation. If the
 	// digest cannot be verified, don't even bother with those other things.
-	if digested, isCanonical := ref.(reference.Canonical); isCanonical {
+	if digested, isCanonical := ref.(dreference.Canonical); isCanonical {
 		verifier := digested.Digest().Verifier()
 		if _, err := verifier.Write(signedManifest.Canonical); err != nil {
 			return nil, err
@@ -298,7 +298,7 @@ func fixManifestLayers(m *schema1.Manifest) error {
 	return nil
 }
 
-func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Named, mfst *schema2.DeserializedManifest) (img *image.Image, mfInfo manifestInfo, err error) {
+func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref dreference.Named, mfst *schema2.DeserializedManifest) (img *image.Image, mfInfo manifestInfo, err error) {
 	mfInfo.digest, err = schema2ManifestDigest(ref, mfst)
 	if err != nil {
 		return nil, mfInfo, err
@@ -437,14 +437,14 @@ func allowV1Fallback(err error) error {
 
 // schema2ManifestDigest computes the manifest digest, and, if pulling by
 // digest, ensures that it matches the requested digest.
-func schema2ManifestDigest(ref reference.Named, mfst distribution.Manifest) (digest.Digest, error) {
+func schema2ManifestDigest(ref dreference.Named, mfst distribution.Manifest) (digest.Digest, error) {
 	_, canonical, err := mfst.Payload()
 	if err != nil {
 		return "", err
 	}
 
 	// If pull by digest, then verify the manifest digest.
-	if digested, isDigested := ref.(reference.Canonical); isDigested {
+	if digested, isDigested := ref.(dreference.Canonical); isDigested {
 		verifier := digested.Digest().Verifier()
 		if _, err := verifier.Write(canonical); err != nil {
 			return "", err
@@ -462,7 +462,7 @@ func schema2ManifestDigest(ref reference.Named, mfst distribution.Manifest) (dig
 
 // pullManifestList handles "manifest lists" which point to various
 // platform-specific manifests.
-func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref reference.Named, mfstList *manifestlist.DeserializedManifestList) ([]*image.Image, []manifestInfo, []string, error) {
+func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref dreference.Named, mfstList *manifestlist.DeserializedManifestList) ([]*image.Image, []manifestInfo, []string, error) {
 	var (
 		imageList = []*image.Image{}
 		mfInfos   = []manifestInfo{}
@@ -493,7 +493,7 @@ func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref reference
 			return nil, nil, nil, err
 		}
 
-		manifestRef, err := reference.WithDigest(ref, thisDigest)
+		manifestRef, err := dreference.WithDigest(ref, thisDigest)
 		if err != nil {
 			return nil, nil, nil, err
 		}

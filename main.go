@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/docker/docker/cli/config"
 )
