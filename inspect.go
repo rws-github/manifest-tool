@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/estesp/manifest-tool/docker"
+	"github.com/sirupsen/logrus"
 )
 
 var inspectCmd = cli.Command{

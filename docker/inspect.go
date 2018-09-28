@@ -87,35 +87,15 @@ type manifestFetcher interface {
 }
 
 func validateName(name string) error {
-	distref, err := dreference.ParseNamed(name)
+	distref, err := dreference.ParseNormalizedNamed(name)
 	if err != nil {
 		return err
 	}
 	hostname := dreference.Domain(distref)
-	// hostname, _ := splitHostname(distref.String())
 	if hostname == "" {
 		return fmt.Errorf("Please use a fully qualified repository name")
 	}
 	return nil
-}
-
-// splitHostname splits a repository name to hostname and remotename string.
-// If no valid hostname is found, the default hostname is used. Repository name
-// needs to be already validated before.
-func splitHostname(name string) (hostname, remoteName string) {
-	i := strings.IndexRune(name, '/')
-	if i == -1 || (!strings.ContainsAny(name[:i], ".:") && name[:i] != "localhost") {
-		hostname, remoteName = DefaultHostname, name
-	} else {
-		hostname, remoteName = name[:i], name[i+1:]
-	}
-	if hostname == LegacyDefaultHostname {
-		hostname = DefaultHostname
-	}
-	if hostname == DefaultHostname && !strings.ContainsRune(remoteName, '/') {
-		remoteName = DefaultRepoPrefix + remoteName
-	}
-	return
 }
 
 func checkHTTPRedirect(req *http.Request, via []*http.Request) error {
@@ -154,7 +134,7 @@ func GetImageData(a *types.AuthInfo, name string) ([]types.ImageInspect, *regist
 	if err := validateName(name); err != nil {
 		return nil, nil, err
 	}
-	ref, err := dreference.ParseNamed(name)
+	ref, err := dreference.ParseNormalizedNamed(name)
 	if err != nil {
 		return nil, nil, err
 	}

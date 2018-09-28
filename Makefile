@@ -1,4 +1,4 @@
-.PHONY: all binary build static clean install install shell test-integration
+.PHONY: all build binary static build-container clean cross cross-clean signrelease install shell test validate fmt
 
 PREFIX ?= ${DESTDIR}/usr
 INSTALLDIR=${PREFIX}/bin
@@ -18,6 +18,8 @@ ifeq ($(INTERACTIVE), 1)
 	DOCKER_RUN += -t
 endif
 DOCKER_RUN_DOCKER := $(DOCKER_RUN) -v $(shell pwd):/go/src/github.com/estesp/manifest-tool -w /go/src/github.com/estesp/manifest-tool "$(DOCKER_IMAGE)"
+
+GOFILES=$(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
 all: build
 
@@ -58,5 +60,11 @@ install:
 shell: build-container
 	$(DOCKER_RUN_DOCKER) bash
 
+test:
+	go test $(shell go list ./... | grep -v /vendor/)
+
 validate: build-container
 	$(DOCKER_RUN_DOCKER) hack/make.sh validate-git-marks validate-gofmt validate-lint validate-vet
+
+fmt:
+	gofmt -l ${GOFILES}
